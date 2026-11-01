@@ -8,52 +8,160 @@ use App\Models\ProductOffering;
 use App\Models\Subscription;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Services\ChatGPTService;
-use App\Services\ClaudeService;
-use App\Services\OrganizationAdminService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
-use Throwable;
 
 class AdminCatalogController extends Controller
 {
     public function index(): View
     {
-        $monthStart = now()->startOfMonth();
-        $monthEnd = now()->endOfMonth();
-        $paidTransactions = Transaction::query()->where('status', 'paid');
-        $monthTransactions = (clone $paidTransactions)->whereBetween('paid_at', [$monthStart, $monthEnd]);
-        $financialTransactions = (clone $paidTransactions)->with('productOffering')->where('paid_at', '>=', now()->subMonths(5)->startOfMonth())->get();
-        $financialChart = collect(range(5, 0))->map(function (int $monthsAgo) use ($financialTransactions): array {
-            $date = now()->subMonths($monthsAgo)->startOfMonth();
-            $rows = $financialTransactions->filter(fn (Transaction $transaction): bool => $transaction->paid_at?->isSameMonth($date));
-            $revenue = (float) $rows->sum('total_amount');
-            $capital = (float) $rows->sum(fn (Transaction $transaction): float => (float) ($transaction->productOffering?->price ?? 0));
+        $now = now();
+        $monthStart = $now->copy()->startOfMonth();
+        $monthEnd = $now->copy()->endOfMonth();
+        $chartStart = $now->copy()->subMonths(5)->startOfMonth();
 
-            return ['label' => $date->format('M'), 'revenue' => $revenue, 'capital' => $capital, 'profit' => $revenue - $capital];
-        })->values();
-        $monthRevenue = (float) $monthTransactions->sum('total_amount');
-        $monthCapital = (float) $monthTransactions->with('productOffering')->get()->sum(fn (Transaction $transaction): float => (float) ($transaction->productOffering?->price ?? 0));
+        // Paid transactions
+        $paidTransactions = Transaction::query()
+            ->where('status', 'paid');
+
+        $monthTransactions = (clone $paidTransactions)
+            ->whereBetween('paid_at', [$monthStart, $monthEnd]);
+
+        // Financial transactions (last 6 months)
+        $financialTransactions = (clone $paidTransactions)
+            ->where('paid_at', '>=', $chartStart)
+            ->get();
+
+        // Offerings (last 6 months)
+        // Modal tidak bergantung pada transactions
+        $financialOfferings = ProductOffering::query()
+            ->where('created_at', '>=', $chartStart)
+            ->get();
+
+        // Financial chart
+        $financialChart = collect(range(5, 0))
+            ->map(function (int $monthsAgo) use (
+                $financialTransactions,
+                $financialOfferings,
+                $now
+            ): array {
+                $date = $now->copy()
+                    ->subMonths($monthsAgo)
+                    ->startOfMonth();
+
+                // Revenue dari paid transactions
+                $transactions = $financialTransactions->filter(
+                    fn (Transaction $transaction): bool => $transaction->paid_at?->isSameMonth($date)
+                );
+
+                $revenue = (float) $transactions->sum('total_amount');
+
+                // Capital langsung dari product offerings
+                $offerings = $financialOfferings->filter(
+                    fn (ProductOffering $offering): bool => $offering->created_at?->isSameMonth($date)
+                );
+
+                $capital = (float) $offerings->sum('price');
+
+                return [
+                    'label' => $date->format('M'),
+                    'revenue' => $revenue,
+                    'capital' => $capital,
+                    'profit' => $revenue - $capital,
+                ];
+            })
+            ->values();
+
+        // Monthly revenue
+        $monthRevenue = (float) (clone $monthTransactions)
+            ->sum('total_amount');
+
+        // Monthly capital langsung dari offerings
+        $monthCapital = (float) ProductOffering::query()
+            ->whereBetween('created_at', [$monthStart, $monthEnd])
+            ->sum('price');
+
+        // Product chart
+        $productChart = Transaction::query()
+            ->selectRaw('
+            product_name,
+            COUNT(*) as transaction_count,
+            SUM(total_amount) as revenue
+        ')
+            ->where('status', 'paid')
+            ->whereNotNull('product_name')
+            ->groupBy('product_name')
+            ->orderByDesc('transaction_count')
+            ->get();
 
         return view('admin.catalog.index', [
             'metrics' => [
                 'monthRevenue' => $monthRevenue,
                 'monthCapital' => $monthCapital,
                 'monthProfit' => $monthRevenue - $monthCapital,
-                'monthTransactions' => (clone $monthTransactions)->count(),
-                'activeSubscriptions' => Subscription::query()->where('status', 'active')->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))->count(),
-                'activeCustomers' => User::query()->where('role', 'client')->whereHas('subscriptions', fn ($query) => $query->where('status', 'active')->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now())))->count(),
-                'activeOfferings' => ProductOffering::query()->where('status', true)->count(),
-                'pendingTransactions' => Transaction::query()->where('status', 'pending')->count(),
+
+                'monthTransactions' => (clone $monthTransactions)
+                    ->count(),
+
+                'activeSubscriptions' => Subscription::query()
+                    ->where('status', 'active')
+                    ->where(function ($query) {
+                        $query->whereNull('expires_at')
+                            ->orWhere('expires_at', '>', now());
+                    })
+                    ->count(),
+
+                'activeCustomers' => User::query()
+                    ->where('role', 'client')
+                    ->whereHas('subscriptions', function ($query) {
+                        $query->where('status', 'active')
+                            ->where(function ($query) {
+                                $query->whereNull('expires_at')
+                                    ->orWhere('expires_at', '>', now());
+                            });
+                    })
+                    ->count(),
+
+                'activeOfferings' => ProductOffering::query()
+                    ->where('status', 'active')
+                    ->count(),
+
+                'pendingTransactions' => Transaction::query()
+                    ->where('status', 'pending')
+                    ->count(),
             ],
-            'recentTransactions' => Transaction::query()->with(['user', 'cashier', 'productOffering'])->latest('paid_at')->limit(8)->get(),
-            'expiringSubscriptions' => Subscription::query()->with(['user', 'productOffering.product'])->where('status', 'active')->whereBetween('expires_at', [now(), now()->addDays(7)])->orderBy('expires_at')->limit(6)->get(),
-            'topOfferings' => ProductOffering::query()->with('product')->withCount(['transactions' => fn ($query) => $query->where('status', 'paid')])->orderByDesc('transactions_count')->limit(5)->get(),
+
+            'recentTransactions' => Transaction::query()
+                ->with(['user', 'cashier', 'productOffering'])
+                ->latest('paid_at')
+                ->limit(8)
+                ->get(),
+
+            'expiringSubscriptions' => Subscription::query()
+                ->with(['user', 'productOffering.product'])
+                ->where('status', 'active')
+                ->whereBetween('expires_at', [
+                    now(),
+                    now()->addDays(7),
+            ])
+                ->orderBy('expires_at')
+                ->limit(6)
+                ->get(),
+
+            'topOfferings' => ProductOffering::query()
+                ->with('product')
+                ->withCount([
+                    'transactions' => fn ($query) => $query->where('status', 'paid'),
+            ])
+                ->orderByDesc('transactions_count')
+                ->limit(5)
+                ->get(),
+
             'financialChart' => $financialChart,
+            'productChart' => $productChart,
         ]);
     }
 
@@ -69,77 +177,13 @@ class AdminCatalogController extends Controller
 
     public function offeringDetail(ProductOffering $productOffering): View
     {
-        $productOffering->load(['product', 'accountType', 'organization', 'subscriptions.user'])->loadCount('subscriptions');
-        $productKey = Str::lower(($productOffering->product->slug ?? '').' '.($productOffering->product->name ?? ''));
-        $providerLabel = Str::contains($productKey, ['chatgpt', 'openai'])
-            ? 'ChatGPT / OpenAI'
-            : (Str::contains($productKey, ['claude', 'anthropic']) ? 'Claude / Anthropic' : 'Provider tidak didukung');
+        $productOffering->load(['product', 'accountType', 'subscriptions.user'])->loadCount('subscriptions');
+        $providerLabel = 'Akses manual';
 
         return view('admin.master.offering-detail', [
             'offering' => $productOffering,
-            'providerLabel' => $providerLabel,
-            'providerKey' => $providerLabel === 'Provider tidak didukung' ? null : Str::before($providerLabel, ' /'),
-            'connectionError' => null,
             'subscriptions' => $productOffering->subscriptions->sortByDesc('expires_at')->values(),
         ]);
-    }
-
-    public function inviteTransactionUser(Request $request, ProductOffering $productOffering): \Illuminate\Http\JsonResponse
-    {
-        $productOffering->load(['product', 'organization']);
-        $productKey = Str::lower(($productOffering->product->slug ?? '').' '.($productOffering->product->name ?? ''));
-        $service = Str::contains($productKey, ['chatgpt', 'openai'])
-            ? app(ChatGPTService::class)
-            : (Str::contains($productKey, ['claude', 'anthropic']) ? app(ClaudeService::class) : null);
-
-        if (! $service) {
-            return response()->json(['message' => 'Provider untuk product ini belum didukung.'], 422);
-        }
-
-        if (! $productOffering->organization) {
-            return response()->json(['message' => 'Offering ini belum memiliki organization.'], 422);
-        }
-
-        $data = $request->validate([
-            'user_id' => [
-                'required',
-                Rule::exists('users', 'id')->where('role', 'client'),
-                Rule::exists('transactions', 'user_id')->where(fn ($query) => $query
-                    ->where('product_offering_id', $productOffering->id)
-                    ->where('status', 'paid')),
-            ],
-            'role' => ['required', Rule::in($service->roles())],
-            'project_id' => ['nullable', 'string', 'max:255'],
-            'organization_id' => ['nullable', 'string', 'max:255'],
-        ]);
-        $user = User::query()->where('role', 'client')->findOrFail($data['user_id']);
-
-        try {
-            if ($service instanceof ChatGPTService && filled($data['organization_id'] ?? null)) {
-                $service->selectOrganization($data['organization_id']);
-                $productOffering->organization()->update(['external_id' => $data['organization_id']]);
-            }
-
-            if ($service->findByEmail($productOffering, 'users', $user->email)) {
-                return response()->json(['message' => 'User ini sudah menjadi member di provider.'], 409);
-            }
-
-            $existingInvite = $service->findByEmail($productOffering, 'invites', $user->email);
-            if ($existingInvite && in_array($existingInvite['status'] ?? 'pending', ['pending', 'accepted'], true)) {
-                return response()->json(['message' => 'User ini sudah pernah diundang ke provider.'], 409);
-            }
-
-            return response()->json([
-                'message' => 'Undangan berhasil dikirim.',
-                'data' => $service->invite($productOffering, $user->email, $data['role'], $data['project_id'] ?? null),
-            ], 201);
-        } catch (Throwable $exception) {
-            $status = $exception instanceof \RuntimeException && $exception->getCode() >= 400 && $exception->getCode() < 500
-                ? $exception->getCode()
-                : 422;
-
-            return response()->json(['message' => $exception->getMessage()], $status);
-        }
     }
 
     public function products(): View
@@ -219,12 +263,8 @@ class AdminCatalogController extends Controller
 
         $offering = ProductOffering::updateOrCreate(
             ['product_id' => $data['product_id'], 'account_type_id' => $data['account_type_id']],
-            [...$data, 'status' => $request->boolean('status')],
+            [...$data, 'status' => 'active'],
         );
-        $offering->organization()->updateOrCreate([], [
-            'email' => $data['email'],
-            'expires_at' => $data['expires_at'],
-        ]);
 
         return back()->with('success', 'Offering berhasil disimpan.');
     }
@@ -246,15 +286,17 @@ class AdminCatalogController extends Controller
             'starts_at' => ['required', 'date'],
             'expires_at' => ['required', 'date', 'after_or_equal:starts_at'],
         ]);
-        $data['status'] = $request->boolean('status');
-
         $productOffering->update($data);
-        $productOffering->organization()->updateOrCreate([], [
-            'email' => $data['email'],
-            'expires_at' => $data['expires_at'],
-        ]);
 
         return back()->with('success', 'Offering berhasil diperbarui.');
+    }
+
+    public function updateOfferingStatus(Request $request, ProductOffering $productOffering): RedirectResponse
+    {
+        $data = $request->validate(['status' => ['required', Rule::in(['active', 'suspended', 'deactivated'])]]);
+        $productOffering->update($data);
+
+        return back()->with('success', 'Status offering berhasil diperbarui.');
     }
 
     public function addOfferingUser(Request $request, ProductOffering $productOffering): RedirectResponse
@@ -267,18 +309,12 @@ class AdminCatalogController extends Controller
             return back()->with('error', 'Tambahkan email pada offering sebelum menambahkan user.');
         }
 
-        $organization = $productOffering->organization()->firstOrCreate([], [
-            'email' => $productOffering->email,
-            'expires_at' => $productOffering->expires_at,
-        ]);
-
         if ($productOffering->subscriptions()->where('user_id', $data['user_id'])->exists()) {
             return back()->with('error', 'User tersebut sudah ditambahkan ke offering ini.');
         }
 
         Subscription::create([
             'user_id' => $data['user_id'],
-            'organization_id' => $organization->id,
             'product_offering_id' => $productOffering->id,
             'status' => 'active',
             'starts_at' => $productOffering->starts_at,
@@ -292,7 +328,6 @@ class AdminCatalogController extends Controller
     {
         DB::transaction(function () use ($productOffering): void {
             $productOffering->subscriptions()->delete();
-            $productOffering->organization?->delete();
             $productOffering->delete();
         });
 

@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ProductOffering extends Model
 {
@@ -13,7 +12,7 @@ class ProductOffering extends Model
 
     protected function casts(): array
     {
-        return ['price' => 'decimal:2', 'status' => 'boolean', 'starts_at' => 'datetime', 'expires_at' => 'datetime'];
+        return ['price' => 'decimal:2', 'status' => 'string', 'starts_at' => 'datetime', 'expires_at' => 'datetime'];
     }
 
     public function product(): BelongsTo
@@ -29,11 +28,6 @@ class ProductOffering extends Model
     public function transactions(): HasMany
     {
         return $this->hasMany(Transaction::class);
-    }
-
-    public function organization(): HasOne
-    {
-        return $this->hasOne(Organization::class);
     }
 
     public function subscriptions(): HasMany

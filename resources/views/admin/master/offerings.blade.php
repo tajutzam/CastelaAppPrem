@@ -35,7 +35,7 @@
             <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th class="ps-4">Produk</th><th>Email</th><th>Mulai</th><th>Kedaluwarsa</th><th>Harga</th><th>Users</th><th class="text-end pe-4">Aksi</th></tr></thead><tbody>
                 @forelse ($offerings as $offering)
                     <tr>
-                        <td class="ps-4"><div class="fw-semibold text-dark">{{ $offering->product->name }}</div><span class="badge {{ $offering->status ? 'badge-soft-success' : 'badge-soft-danger' }} mt-1">{{ $offering->status ? 'Aktif' : 'Nonaktif' }}</span></td>
+                        <td class="ps-4"><div class="fw-semibold text-dark">{{ $offering->product->name }}</div><span class="badge {{ $offering->status === 'active' ? 'badge-soft-success' : ($offering->status === 'suspended' ? 'badge-soft-warning' : 'badge-soft-danger') }} mt-1">{{ ['active' => 'Aktif', 'suspended' => 'Suspend', 'deactivated' => 'Deactivated'][$offering->status] ?? $offering->status }}</span></td>
                         <td>{{ $offering->email ?: '—' }}</td>
                         <td class="text-nowrap">{{ $offering->starts_at?->format('d M Y H:i') ?? '—' }}</td>
                         <td class="text-nowrap">{{ $offering->expires_at?->format('d M Y H:i') ?? '—' }}</td>
@@ -45,7 +45,8 @@
                             <a href="{{ route('admin.offerings.show', $offering) }}" class="btn btn-light btn-sm" title="Detail offering"><i class="fa-solid fa-eye"></i></a>
                             <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#offering-users-{{ $offering->id }}" title="Tambah user"><i class="fa-solid fa-user-plus"></i></button>
                             <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#offering-edit-{{ $offering->id }}" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                            <form method="POST" action="{{ route('admin.offerings.destroy', $offering) }}" class="d-inline" onsubmit="return confirm('Hapus offering ini beserta seluruh akses user terkait?')">@csrf @method('DELETE')<button class="btn btn-light btn-sm text-danger" title="Hapus offering"><i class="fa-solid fa-trash"></i></button></form>
+                            <form method="POST" action="{{ route('admin.offerings.status', $offering) }}" class="d-inline">@csrf @method('PATCH')<select name="status" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()" title="Ubah status offering"><option value="active" @selected($offering->status === 'active')>Aktif</option><option value="suspended" @selected($offering->status === 'suspended')>Suspend</option><option value="deactivated" @selected($offering->status === 'deactivated')>Deactivated</option></select></form>
+                            <form method="POST" action="{{ route('admin.offerings.destroy', $offering) }}" class="d-inline" data-confirm="Hapus offering ini beserta seluruh akses user terkait?">@csrf @method('DELETE')<button class="btn btn-light btn-sm text-danger" title="Hapus offering"><i class="fa-solid fa-trash"></i></button></form>
                         </td>
                     </tr>
                 @empty

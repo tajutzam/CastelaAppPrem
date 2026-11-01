@@ -3,19 +3,18 @@
 namespace App\Providers;
 
 use App\Models\AppSetting;
-use Illuminate\Support\ServiceProvider;
+use App\Models\Transaction;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-    
     public function register(): void
     {
         //
     }
-
 
     public function boot(): void
     {
@@ -24,7 +23,7 @@ class AppServiceProvider extends ServiceProvider
             $settingsData = Cache::rememberForever(
                 'admin.app_settings',
                 function (): array {
-                    if (!Schema::hasTable('app_settings')) {
+                    if (! Schema::hasTable('app_settings')) {
                         return [];
                     }
 
@@ -54,7 +53,19 @@ class AppServiceProvider extends ServiceProvider
                 )
             );
 
+            $expiringTransactions = Schema::hasTable('transactions')
+                ? Transaction::query()
+                    ->with('user')
+                    ->where('status', 'paid')
+                    ->whereNotNull('expires_at')
+                    ->whereBetween('expires_at', [now(), now()->addDays(5)])
+                    ->orderBy('expires_at')
+                    ->limit(8)
+                    ->get()
+                : collect();
+
             $view->with('appSettings', $settings);
+            $view->with('expiringTransactions', $expiringTransactions);
         });
     }
 }

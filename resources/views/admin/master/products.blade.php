@@ -34,7 +34,7 @@
                 <td class="text-end pe-4"><div class="d-inline-flex align-items-center gap-1">
                     <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#editProduct{{ $product->id }}" aria-label="Edit {{ $product->name }}"><i class="fa-solid fa-pen"></i></button>
                     <form method="POST" action="{{ route('admin.products.toggle', $product) }}">@csrf @method('PATCH')<button class="btn btn-light btn-sm" title="{{ $product->status ? 'Nonaktifkan' : 'Aktifkan' }}"><i class="fa-solid {{ $product->status ? 'fa-toggle-on text-primary' : 'fa-toggle-off' }}"></i></button></form>
-                    <form method="POST" action="{{ route('admin.products.destroy', $product) }}" onsubmit="return confirm('Hapus produk {{ $product->name }}?')">@csrf @method('DELETE')<button class="btn btn-light btn-sm text-danger" title="{{ $product->offerings_count ? 'Hapus penawaran sebelum menghapus produk' : 'Hapus produk' }}" @disabled($product->offerings_count > 0)><i class="fa-solid fa-trash"></i></button></form>
+                    <form method="POST" action="{{ route('admin.products.destroy', $product) }}" data-confirm="Hapus produk {{ $product->name }}?">@csrf @method('DELETE')<button class="btn btn-light btn-sm text-danger" title="{{ $product->offerings_count ? 'Hapus penawaran sebelum menghapus produk' : 'Hapus produk' }}" @disabled($product->offerings_count > 0)><i class="fa-solid fa-trash"></i></button></form>
                 </div></td>
             </tr>
         @empty

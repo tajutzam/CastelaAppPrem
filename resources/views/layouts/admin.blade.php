@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
             --ink: #181c32;
@@ -272,6 +273,19 @@
             gap: 12px;
         }
 
+        .notification-wrap { position: relative; }
+        .notification-button { position: relative; display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid #e4e8f1; border-radius: 50%; color: #7e8299; background: #fff; }
+        .notification-button:hover { color: var(--primary); border-color: #d8ddf2; background: #f7f8ff; }
+        .notification-count { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px; padding: 0 4px; border: 2px solid #fff; border-radius: 99px; color: #fff; background: #f1416c; font-size: .62rem; font-weight: 800; line-height: 13px; text-align: center; }
+        .notification-menu { width: 340px; padding: 0; border: 0; border-radius: 14px; box-shadow: 0 16px 40px rgba(24, 28, 50, .14); overflow: hidden; }
+        .notification-heading { padding: 15px 17px; border-bottom: 1px solid var(--line); color: var(--ink); font-weight: 700; }
+        .notification-item { display: block; padding: 12px 17px; border-bottom: 1px solid #f0f2f7; color: #3f4254; }
+        .notification-item:hover { background: #f7f9ff; }
+        .notification-item strong { display: block; color: var(--ink); font-size: .82rem; }
+        .notification-item small { color: var(--muted); }
+        .notification-empty { padding: 22px 17px; color: var(--muted); text-align: center; }
+        @media (max-width: 575px) { .notification-menu { position: fixed !important; right: 12px !important; left: 12px !important; width: auto; } }
+
         .logout-button {
             padding: 8px 11px;
             border: 1px solid var(--line);
@@ -317,16 +331,21 @@
 
         .card {
             overflow: hidden;
-            border: 1px solid var(--line);
-            border-radius: 11px;
+            border: 0;
+            border-radius: 16px;
             background: #fff;
-            box-shadow: 0 2px 8px rgba(24, 28, 50, .025);
+            box-shadow: 0 8px 26px rgba(24, 28, 50, .055);
+            transition: box-shadow .2s ease, transform .2s ease;
+        }
+
+        .card:hover {
+            box-shadow: 0 13px 32px rgba(24, 28, 50, .09);
         }
 
         .card-header {
-            padding: 19px 22px;
-            border-bottom: 1px solid var(--line);
-            background: #fff;
+            padding: 20px 22px;
+            border-bottom: 1px solid #edf0f7;
+            background: linear-gradient(180deg, #fff, #fcfdff);
         }
 
         .card-title {
@@ -340,8 +359,34 @@
             color: var(--muted) !important;
         }
 
+        .form-control, .form-select {
+            border-color: #e4e8f1;
+            border-radius: 9px;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(62, 103, 246, .12);
+        }
+
+        .table thead th {
+            color: #8790a8;
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+        }
+
+        .table tbody tr {
+            transition: background .15s ease;
+        }
+
+        .table tbody tr:hover {
+            background: #fbfcff;
+        }
+
         .btn {
-            border-radius: 7px;
+            border-radius: 9px;
             font-size: .82rem;
             font-weight: 600;
         }
@@ -753,8 +798,19 @@
                         <h1>{{ $heading ?? 'Catalog' }}</h1>
                     </div>
                 </div>
-                <div class="topbar-account">
-                    <div class="user-chip" title="{{ auth()->user()->name }}">
+                 <div class="topbar-account">
+                     <div class="dropdown notification-wrap">
+                         <button class="notification-button" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifikasi transaksi kedaluwarsa"><i class="fa-regular fa-bell"></i>@if($expiringTransactions->isNotEmpty())<span class="notification-count">{{ $expiringTransactions->count() }}</span>@endif</button>
+                         <div class="dropdown-menu dropdown-menu-end notification-menu">
+                             <div class="notification-heading"><i class="fa-regular fa-clock me-2 text-warning"></i>Segera expired <small class="text-muted">(5 hari)</small></div>
+                             @forelse($expiringTransactions as $expiring)
+                                 <a class="notification-item" href="{{ route('admin.transactions.index', ['customer' => $expiring->user_id]) }}"><strong>{{ $expiring->user?->name ?: 'Customer' }} · {{ $expiring->product_name }}</strong><small>Expired {{ $expiring->expires_at->format('d M Y') }} · {{ max(0, (int) now()->diffInDays($expiring->expires_at, false)) }} hari lagi</small></a>
+                             @empty
+                                 <div class="notification-empty"><i class="fa-regular fa-circle-check d-block mb-2 text-success"></i>Tidak ada transaksi yang akan expired.</div>
+                             @endforelse
+                         </div>
+                     </div>
+                     <div class="user-chip" title="{{ auth()->user()->name }}">
                         {{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</div>
                     <form method="POST" action="{{ route('logout') }}">@csrf<button class="logout-button"><i
                                 class="fa-solid fa-arrow-right-from-bracket me-1"></i><span
@@ -763,6 +819,35 @@
             </header>
             <div class="page-content">@yield('content')</div>
         </main>
+        @if(session('success') || session('error'))
+            <script>
+                document.addEventListener('DOMContentLoaded', () => Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: @json(session('success') ? 'success' : 'error'),
+                    title: @json(session('success') ?: session('error')),
+                    showConfirmButton: false,
+                    timer: 3200,
+                    timerProgressBar: true,
+                }));
+            </script>
+        @endif
+        <script>
+            document.addEventListener('submit', event => {
+                const form = event.target;
+                if (!form.matches('[data-confirm]')) return;
+                event.preventDefault();
+                Swal.fire({
+                    title: form.dataset.confirmTitle || 'Konfirmasi tindakan',
+                    text: form.dataset.confirm,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Ya, lanjutkan',
+                    cancelButtonText: 'Batal',
+                    reverseButtons: true,
+                }).then(result => { if (result.isConfirmed) form.submit(); });
+            });
+        </script>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>

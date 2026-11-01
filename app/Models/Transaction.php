@@ -20,6 +20,8 @@ class Transaction extends Model
         'expires_at',
         'status',
         'paid_at',
+        'logged_out_at',
+        'logged_out_by',
     ];
 
     protected function casts(): array
@@ -29,6 +31,7 @@ class Transaction extends Model
             'starts_at' => 'datetime',
             'expires_at' => 'datetime',
             'paid_at' => 'datetime',
+            'logged_out_at' => 'datetime',
         ];
     }
 

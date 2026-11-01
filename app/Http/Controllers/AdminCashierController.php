@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Organization;
+use App\Models\AppSetting;
 use App\Models\ProductOffering;
 use App\Models\Subscription;
 use App\Models\Transaction;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -24,20 +25,126 @@ class AdminCashierController extends Controller
 
     public function transactions(Request $request): View
     {
-        $query = Transaction::with(['user', 'cashier'])->latest('paid_at');
+        $customer = $request->integer('customer');
+        $search = $request->string('search')->trim()->toString();
+        $sortColumns = ['number', 'product_name', 'total_amount', 'starts_at', 'expires_at', 'paid_at', 'status'];
+        $sort = $request->string('sort')->toString();
+        $direction = $request->string('direction')->lower()->toString() === 'asc' ? 'asc' : 'desc';
+        $sort = in_array($sort, $sortColumns, true) ? $sort : 'paid_at';
+        $query = Transaction::with(['user', 'cashier', 'subscription'])
+            ->when($customer, fn ($query) => $query->where('user_id', $customer))
+            ->when($search, fn ($query) => $query->where(function ($query) use ($search): void {
+                $query->where('number', 'like', "%{$search}%")
+                    ->orWhereHas('user', fn ($user) => $user
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('phone_number', 'like', "%{$search}%"));
+            }))
+            ->orderBy($sort, $direction);
 
         return view('admin.transactions.index', [
-            'transactions' => $query->paginate(15, ['*'], 'transactions_page')->withQueryString(),
+            'sort' => $sort,
+            'direction' => $direction,
+            'transactions' => $query->paginate(5, ['*'], 'transactions_page')->withQueryString(),
+            'customer' => $customer,
+            'search' => $search,
+            'customers' => User::query()->where('role', 'client')->orderBy('name')->get(['id', 'name', 'email']),
+            'cards' => [
+                'total' => (clone $query)->count(),
+                'paid' => (clone $query)->where('status', 'paid')->count(),
+                'revenue' => (float) (clone $query)->where('status', 'paid')->sum('total_amount'),
+            ],
         ]);
+    }
+
+    public function showTransaction(Transaction $transaction): View
+    {
+        return view('admin.transactions.show', [
+            'transaction' => $transaction->load(['user', 'cashier', 'subscription', 'productOffering.product', 'productOffering.accountType']),
+        ]);
+    }
+
+    public function markTransactionLoggedOut(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $transaction->update([
+            'logged_out_at' => now(),
+            'logged_out_by' => $request->user()->id,
+        ]);
+
+        return back()->with('success', 'Status logout transaksi berhasil dicatat.');
+    }
+
+    public function markTransactionInactive(Transaction $transaction): RedirectResponse
+    {
+        $transaction->update(['status' => 'cancelled']);
+        $transaction->subscription?->update(['status' => 'cancelled']);
+
+        return back()->with('success', 'Transaksi ditandai tidak aktif.');
+    }
+
+    public function receipt(Transaction $transaction): View
+    {
+        return view('admin.transactions.receipt', [
+            'transaction' => $transaction->load(['user', 'cashier', 'productOffering.product', 'productOffering.accountType']),
+            'appSettings' => collect(AppSetting::query()->pluck('value', 'key')),
+        ]);
+    }
+
+    public function updateTransaction(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $data = $request->validate([
+            'total_amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+            'duration_days' => ['required', 'integer', 'min:1', 'max:3650'],
+            'status' => ['required', Rule::in(['paid', 'pending', 'cancelled'])],
+            'paid_at' => ['nullable', 'date'],
+            'starts_at' => ['nullable', 'date'],
+        ]);
+
+        $startsAt = filled($data['starts_at'] ?? null)
+            ? now()->parse($data['starts_at'])
+            : $transaction->starts_at;
+        $data['starts_at'] = $startsAt;
+        $data['expires_at'] = $startsAt?->copy()->addDays((int) $data['duration_days']);
+
+        DB::transaction(function () use ($transaction, $data): void {
+            $transaction->update($data);
+
+            if ($transaction->subscription) {
+                $transaction->subscription->update([
+                    'status' => $data['status'] === 'paid' ? 'active' : $data['status'],
+                    'starts_at' => $data['starts_at'],
+                    'expires_at' => $data['expires_at'],
+                ]);
+            }
+        });
+
+        return back()->with('success', 'Transaksi berhasil diperbarui.');
+    }
+
+    public function destroyTransaction(Transaction $transaction): RedirectResponse
+    {
+        $transaction->delete();
+
+        return back()->with('success', 'Transaksi berhasil dihapus. Subscription tetap dipertahankan.');
     }
 
     public function reports(Request $request): View
     {
         $filters = $this->transactionFilters($request);
         $query = $this->transactionQuery($filters);
-        $monthQuery = Transaction::query()->with('productOffering')->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()]);
+        $monthQuery = Transaction::query()->with('productOffering')->where('status', 'paid')->whereBetween('paid_at', [now()->startOfMonth(), now()->endOfMonth()]);
+        $monthlyReports = collect(range(11, 0))->map(function (int $monthsAgo): array {
+            $start = now()->subMonths($monthsAgo)->startOfMonth();
+            $end = $start->copy()->endOfMonth();
+            $rows = Transaction::query()->with('productOffering')->where('status', 'paid')->whereBetween('paid_at', [$start, $end])->get();
+            $sales = (float) $rows->sum('total_amount');
+            $capital = (float) $rows->sum(fn (Transaction $transaction): float => (float) ($transaction->productOffering?->price ?? 0));
+
+            return ['label' => $start->translatedFormat('F Y'), 'count' => $rows->count(), 'sales' => $sales, 'capital' => $capital, 'profit' => $sales - $capital];
+        });
 
         return view('admin.transactions.reports', [
+            'monthlyReports' => $monthlyReports,
             'transactions' => $query->with('productOffering')->latest('paid_at')->paginate(15, ['*'], 'transactions_page')->withQueryString(),
             'transactionStats' => [
                 'monthCount' => (clone $monthQuery)->count(),
@@ -128,7 +235,7 @@ class AdminCashierController extends Controller
             ->withCount(['subscriptions as active_subscriptions_count' => fn ($query) => $query
                 ->where('status', 'active')
                 ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))])
-            ->where('status', true)
+            ->where('status', 'active')
             ->orderBy('product_id')
             ->get()
             ->map(fn ($offering): array => [
@@ -166,7 +273,7 @@ class AdminCashierController extends Controller
                 ->lockForUpdate()
                 ->findOrFail($data['product_offering_id']);
 
-            abort_unless($offering->status, 422, 'Offering ini sedang tidak aktif.');
+            abort_unless($offering->status === 'active', 422, 'Offering ini sedang tidak aktif.');
 
             $temporaryPassword = null;
             if ($data['customer_type'] === 'new') {
@@ -183,51 +290,26 @@ class AdminCashierController extends Controller
             }
 
             $now = now();
-            $activeSubscription = Subscription::query()
+            $activeSeats = Subscription::query()
                 ->where('product_offering_id', $offering->id)
-                ->where('user_id', $customer->id)
                 ->where('status', 'active')
                 ->where('expires_at', '>', $now)
-                ->latest('expires_at')
-                ->lockForUpdate()
-                ->first();
+                ->count();
 
-            if (! $activeSubscription) {
-                $activeSeats = Subscription::query()
-                    ->where('product_offering_id', $offering->id)
-                    ->where('status', 'active')
-                    ->where('expires_at', '>', $now)
-                    ->count();
-
-                if ($activeSeats >= $offering->accountType->max_users) {
-                    abort(422, 'Kapasitas user untuk offering ini sudah penuh.');
-                }
+            if ($activeSeats >= $offering->accountType->max_users) {
+                abort(422, 'Kapasitas user untuk offering ini sudah penuh.');
             }
 
-            $startsAt = $activeSubscription?->expires_at?->copy() ?? $now->copy();
+            $startsAt = $now->copy();
             $expiresAt = $startsAt->copy()->addDays((int) $data['duration_days']);
 
-            $organization = Organization::query()->firstOrCreate(
-                ['product_offering_id' => $offering->id],
-                ['email' => $offering->email ?: $customer->email, 'expires_at' => $expiresAt],
-            );
-            if ($organization->expires_at === null || $organization->expires_at->lt($expiresAt)) {
-                $organization->update(['expires_at' => $expiresAt]);
-            }
-
-            if ($activeSubscription) {
-                $subscription = $activeSubscription;
-                $subscription->update(['expires_at' => $expiresAt]);
-            } else {
-                $subscription = Subscription::create([
-                    'user_id' => $customer->id,
-                    'organization_id' => $organization->id,
-                    'product_offering_id' => $offering->id,
-                    'status' => 'active',
-                    'starts_at' => $startsAt,
-                    'expires_at' => $expiresAt,
-                ]);
-            }
+            $subscription = Subscription::create([
+                'user_id' => $customer->id,
+                'product_offering_id' => $offering->id,
+                'status' => 'active',
+                'starts_at' => $startsAt,
+                'expires_at' => $expiresAt,
+            ]);
 
             $transaction = Transaction::create([
                 'number' => 'TRX-'.Str::upper((string) Str::ulid()),
