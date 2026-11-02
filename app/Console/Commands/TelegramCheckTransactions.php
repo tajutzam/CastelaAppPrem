@@ -55,10 +55,11 @@ class TelegramCheckTransactions extends Command
             $lines[] = 'Tidak ada transaksi aktif.';
         } else {
             foreach ($transactions as $index => $transaction) {
-                $days = max(0, (int) now()->diffInDays($transaction->expires_at, false));
+                $minutes = max(0, now()->diffInMinutes($transaction->expires_at, false));
+                $remaining = sprintf('%d hari %d jam %d menit lagi', intdiv($minutes, 1440), intdiv($minutes % 1440, 60), $minutes % 60);
                 $lines[] = ($index + 1).'. *'.$transaction->product_name.'*';
                 $lines[] = 'Customer: '.($transaction->user?->name ?? '-');
-                $lines[] = 'Expired: '.$transaction->expires_at->format('d M Y').' ('.$days.' hari lagi)';
+                $lines[] = 'Expired: '.$transaction->expires_at->format('d M Y H:i').' ('.$remaining.')';
                 $lines[] = 'Transaksi: '.$transaction->number;
                 $lines[] = '';
                 $buttons[] = [['text' => 'Buka '.$transaction->number, 'url' => $url.'/'.$transaction->id]];

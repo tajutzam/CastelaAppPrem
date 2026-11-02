@@ -26,6 +26,8 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->midd
 Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(function () {
     Route::get('/catalog', [AdminCatalogController::class, 'index'])->name('catalog.index');
     Route::get('/master/offerings', [AdminCatalogController::class, 'offerings'])->name('offerings.index');
+    Route::get('/master/offerings/export', [AdminCatalogController::class, 'exportOfferings'])->name('offerings.export');
+    Route::post('/master/offerings/import', [AdminCatalogController::class, 'importOfferings'])->name('offerings.import');
     Route::get('/offerings/{productOffering}', [AdminCatalogController::class, 'offeringDetail'])->name('offerings.show');
     Route::get('/cashier', [AdminCashierController::class, 'index'])->name('cashier.index');
     Route::get('/transactions', [AdminCashierController::class, 'transactions'])->name('transactions.index');
@@ -34,6 +36,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::patch('/transactions/{transaction}/logged-out', [AdminCashierController::class, 'markTransactionLoggedOut'])->name('transactions.logged-out');
     Route::get('/transactions/{transaction}', [AdminCashierController::class, 'showTransaction'])->name('transactions.show');
     Route::put('/transactions/{transaction}', [AdminCashierController::class, 'updateTransaction'])->name('transactions.update');
+    Route::post('/transactions/{transaction}/renew', [AdminCashierController::class, 'renewTransaction'])->name('transactions.renew');
     Route::delete('/transactions/{transaction}', [AdminCashierController::class, 'destroyTransaction'])->name('transactions.destroy');
     Route::get('/reports', [AdminCashierController::class, 'reports'])->name('reports.index');
     Route::get('/reports/export/pdf', [AdminCashierController::class, 'exportTransactionsPdf'])->name('reports.export.pdf');

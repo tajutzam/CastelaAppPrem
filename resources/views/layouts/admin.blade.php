@@ -369,6 +369,9 @@
             box-shadow: 0 0 0 3px rgba(62, 103, 246, .12);
         }
 
+        .table-sort { color: inherit; }
+        .table-sort:hover { color: var(--primary); }
+
         .table thead th {
             color: #8790a8;
             font-size: .72rem;
@@ -804,7 +807,7 @@
                          <div class="dropdown-menu dropdown-menu-end notification-menu">
                              <div class="notification-heading"><i class="fa-regular fa-clock me-2 text-warning"></i>Segera expired <small class="text-muted">(5 hari)</small></div>
                              @forelse($expiringTransactions as $expiring)
-                                 <a class="notification-item" href="{{ route('admin.transactions.index', ['customer' => $expiring->user_id]) }}"><strong>{{ $expiring->user?->name ?: 'Customer' }} · {{ $expiring->product_name }}</strong><small>Expired {{ $expiring->expires_at->format('d M Y') }} · {{ max(0, (int) now()->diffInDays($expiring->expires_at, false)) }} hari lagi</small></a>
+                                 <a class="notification-item" href="{{ route('admin.transactions.index', ['customer' => $expiring->user_id]) }}"><strong>{{ $expiring->user?->name ?: 'Customer' }} · {{ $expiring->product_name }}</strong><small>Expired {{ $expiring->expires_at->format('d M Y') }} · {{ $formatRemainingTime($expiring->expires_at) }}</small></a>
                              @empty
                                  <div class="notification-empty"><i class="fa-regular fa-circle-check d-block mb-2 text-success"></i>Tidak ada transaksi yang akan expired.</div>
                              @endforelse

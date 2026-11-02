@@ -23,7 +23,7 @@
 <body>
     <div class="actions"><button type="button" onclick="window.print()">Cetak struk</button><button type="button" onclick="window.close()">Tutup</button></div>
     <div class="center">
-        <h1>{{  }}</h1>
+        <h1>Castela </h1>
         <div class="muted">Bukti transaksi</div>
     </div>
     <div class="line"></div>

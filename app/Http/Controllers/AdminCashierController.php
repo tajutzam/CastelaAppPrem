@@ -27,6 +27,8 @@ class AdminCashierController extends Controller
     {
         $customer = $request->integer('customer');
         $search = $request->string('search')->trim()->toString();
+        $logoutStatus = $request->string('logout_status')->toString();
+        $accessStatus = $request->string('access_status')->toString();
         $sortColumns = ['number', 'product_name', 'total_amount', 'starts_at', 'expires_at', 'paid_at', 'status'];
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->lower()->toString() === 'asc' ? 'asc' : 'desc';
@@ -40,14 +42,20 @@ class AdminCashierController extends Controller
                         ->orWhere('email', 'like', "%{$search}%")
                         ->orWhere('phone_number', 'like', "%{$search}%"));
             }))
+            ->when($logoutStatus === 'logged_out', fn ($query) => $query->whereNotNull('logged_out_at'))
+            ->when($logoutStatus === 'pending', fn ($query) => $query->whereNull('logged_out_at'))
+            ->when($accessStatus === 'active', fn ($query) => $query->where('status', 'paid')->where('expires_at', '>', now()))
+            ->when($accessStatus === 'expired', fn ($query) => $query->where(fn ($query) => $query->where('status', '!=', 'paid')->orWhereNull('expires_at')->orWhere('expires_at', '<=', now())))
             ->orderBy($sort, $direction);
 
         return view('admin.transactions.index', [
             'sort' => $sort,
             'direction' => $direction,
-            'transactions' => $query->paginate(5, ['*'], 'transactions_page')->withQueryString(),
+            'transactions' => $query->paginate(10, ['*'], 'transactions_page')->withQueryString(),
             'customer' => $customer,
             'search' => $search,
+            'logoutStatus' => $logoutStatus,
+            'accessStatus' => $accessStatus,
             'customers' => User::query()->where('role', 'client')->orderBy('name')->get(['id', 'name', 'email']),
             'cards' => [
                 'total' => (clone $query)->count(),
@@ -88,6 +96,21 @@ class AdminCashierController extends Controller
             'transaction' => $transaction->load(['user', 'cashier', 'productOffering.product', 'productOffering.accountType']),
             'appSettings' => collect(AppSetting::query()->pluck('value', 'key')),
         ]);
+    }
+
+    public function renewTransaction(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $data = $request->validate([
+            'total_amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
+            'duration_days' => ['required', 'integer', 'min:1', 'max:3650'],
+        ]);
+        $transaction->load('productOffering');
+        $startsAt = now();
+        $expiresAt = $startsAt->copy()->addDays((int) $data['duration_days']);
+        $subscription = Subscription::create(['user_id' => $transaction->user_id, 'product_offering_id' => $transaction->product_offering_id, 'status' => 'active', 'starts_at' => $startsAt, 'expires_at' => $expiresAt]);
+        Transaction::create(['number' => 'TRX-'.Str::upper((string) Str::ulid()), 'user_id' => $transaction->user_id, 'cashier_id' => $request->user()->id, 'product_offering_id' => $transaction->product_offering_id, 'subscription_id' => $subscription->id, 'product_name' => $transaction->product_name, 'total_amount' => $data['total_amount'], 'duration_days' => $data['duration_days'], 'starts_at' => $startsAt, 'expires_at' => $expiresAt, 'status' => 'paid', 'paid_at' => $startsAt]);
+
+        return back()->with('success', 'Perpanjangan berhasil dibuat sebagai transaksi baru.');
     }
 
     public function updateTransaction(Request $request, Transaction $transaction): RedirectResponse
@@ -136,9 +159,9 @@ class AdminCashierController extends Controller
         $monthlyReports = collect(range(11, 0))->map(function (int $monthsAgo): array {
             $start = now()->subMonths($monthsAgo)->startOfMonth();
             $end = $start->copy()->endOfMonth();
-            $rows = Transaction::query()->with('productOffering')->where('status', 'paid')->whereBetween('paid_at', [$start, $end])->get();
+            $rows = Transaction::query()->where('status', 'paid')->whereBetween('paid_at', [$start, $end])->get();
             $sales = (float) $rows->sum('total_amount');
-            $capital = (float) $rows->sum(fn (Transaction $transaction): float => (float) ($transaction->productOffering?->price ?? 0));
+            $capital = (float) ProductOffering::query()->whereBetween('starts_at', [$start, $end])->sum('price');
 
             return ['label' => $start->translatedFormat('F Y'), 'count' => $rows->count(), 'sales' => $sales, 'capital' => $capital, 'profit' => $sales - $capital];
         });
@@ -148,7 +171,7 @@ class AdminCashierController extends Controller
             'transactions' => $query->with('productOffering')->latest('paid_at')->paginate(15, ['*'], 'transactions_page')->withQueryString(),
             'transactionStats' => [
                 'monthCount' => (clone $monthQuery)->count(),
-                'monthCapital' => (clone $monthQuery)->get()->sum(fn (Transaction $transaction): float => (float) ($transaction->productOffering?->price ?? 0)),
+                'monthCapital' => (float) ProductOffering::query()->whereBetween('starts_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('price'),
                 'monthActive' => (clone $monthQuery)->where('status', 'paid')->where('expires_at', '>', now())->count(),
                 'filteredCount' => (clone $query)->count(),
                 'filteredRevenue' => (clone $query)->sum('total_amount'),
@@ -228,14 +251,22 @@ class AdminCashierController extends Controller
         ]);
     }
 
-    public function offerings(): JsonResponse
+    public function offerings(Request $request): JsonResponse
     {
+        $term = $request->string('q')->trim()->toString();
         $offerings = ProductOffering::query()
             ->with(['product:id,name', 'accountType:id,name,max_users'])
             ->withCount(['subscriptions as active_subscriptions_count' => fn ($query) => $query
                 ->where('status', 'active')
                 ->where(fn ($query) => $query->whereNull('expires_at')->orWhere('expires_at', '>', now()))])
             ->where('status', 'active')
+            ->whereHas('product', fn ($query) => $query->where('status', true))
+            ->when($term, fn ($query) => $query->where(function ($query) use ($term): void {
+                $query->whereHas('product', fn ($product) => $product->where('name', 'ilike', "%{$term}%"))
+                    ->orWhereHas('accountType', fn ($accountType) => $accountType->where('name', 'ilike', "%{$term}%"))
+                    ->orWhere('email', 'ilike', "%{$term}%");
+            }))
+            ->whereRaw('(select count(*) from subscriptions where subscriptions.product_offering_id = product_offerings.id and subscriptions.status = ? and subscriptions.expires_at > ?) < (select max_users from account_types where account_types.id = product_offerings.account_type_id)', ['active', now()])
             ->orderBy('product_id')
             ->get()
             ->map(fn ($offering): array => [
@@ -346,6 +377,7 @@ class AdminCashierController extends Controller
                     'starts_at' => $result['transaction']->starts_at->format('d M Y'),
                     'expires_at' => $result['transaction']->expires_at->format('d M Y'),
                     'paid_at' => $result['transaction']->paid_at->format('d M Y H:i'),
+                    'receipt_url' => route('admin.transactions.receipt', $result['transaction']),
                 ],
                 'temporary_password' => $result['temporary_password'],
             ],

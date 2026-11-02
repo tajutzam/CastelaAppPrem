@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\StockWorkbookExport;
+use App\Imports\StockWorkbookImport;
 use App\Models\AccountType;
 use App\Models\Product;
 use App\Models\ProductOffering;
@@ -13,12 +15,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Maatwebsite\Excel\Facades\Excel;
 
 class AdminCatalogController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
-        $now = now();
+        $selectedMonth = $request->date('month', 'Y-m')?->startOfMonth() ?? now()->startOfMonth();
+        $now = $selectedMonth->copy();
         $monthStart = $now->copy()->startOfMonth();
         $monthEnd = $now->copy()->endOfMonth();
         $chartStart = $now->copy()->subMonths(5)->startOfMonth();
@@ -36,9 +40,9 @@ class AdminCatalogController extends Controller
             ->get();
 
         // Offerings (last 6 months)
-        // Modal tidak bergantung pada transactions
+        // Modal mengikuti tanggal mulai premium
         $financialOfferings = ProductOffering::query()
-            ->where('created_at', '>=', $chartStart)
+            ->where('starts_at', '>=', $chartStart)
             ->get();
 
         // Financial chart
@@ -81,7 +85,7 @@ class AdminCatalogController extends Controller
 
         // Monthly capital langsung dari offerings
         $monthCapital = (float) ProductOffering::query()
-            ->whereBetween('created_at', [$monthStart, $monthEnd])
+            ->whereBetween('starts_at', [$monthStart, $monthEnd])
             ->sum('price');
 
         // Product chart
@@ -146,7 +150,7 @@ class AdminCatalogController extends Controller
                 ->whereBetween('expires_at', [
                     now(),
                     now()->addDays(7),
-            ])
+                ])
                 ->orderBy('expires_at')
                 ->limit(6)
                 ->get(),
@@ -155,20 +159,44 @@ class AdminCatalogController extends Controller
                 ->with('product')
                 ->withCount([
                     'transactions' => fn ($query) => $query->where('status', 'paid'),
-            ])
+                ])
                 ->orderByDesc('transactions_count')
                 ->limit(5)
                 ->get(),
 
             'financialChart' => $financialChart,
+            'selectedMonth' => $selectedMonth->format('Y-m'),
             'productChart' => $productChart,
         ]);
     }
 
-    public function offerings(): View
+    public function exportOfferings()
     {
+        return Excel::download(new StockWorkbookExport, 'castela-stock-akun-'.now()->format('Y-m-d').'.xlsx');
+    }
+
+    public function importOfferings(Request $request): RedirectResponse
+    {
+        set_time_limit(0);
+        $request->validate(['stock_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']]);
+        Excel::import(new StockWorkbookImport, $request->file('stock_file'));
+
+        return back()->with('success', 'Stock akun berhasil diimport dan di-upsert ke offering.');
+    }
+
+    public function offerings(Request $request): View
+    {
+        $sortColumns = ['product_id', 'account_type_id', 'email', 'starts_at', 'expires_at', 'price', 'status', 'created_at'];
+        $sort = $request->string('sort')->toString();
+        $direction = $request->string('direction')->lower()->toString() === 'asc' ? 'asc' : 'desc';
+        $sort = in_array($sort, $sortColumns, true) ? $sort : 'created_at';
+        $search = $request->string('search')->trim()->toString();
+
         return view('admin.master.offerings', [
-            'offerings' => ProductOffering::with('product')->withCount('subscriptions')->latest()->paginate(10, ['*'], 'offerings_page')->withQueryString(),
+            'offerings' => ProductOffering::with(['product', 'accountType'])->withCount('subscriptions')->when($search, fn ($query) => $query->where(fn ($query) => $query->where('email', 'ilike', "%{$search}%")->orWhereHas('product', fn ($product) => $product->where('name', 'ilike', "%{$search}%"))->orWhereHas('accountType', fn ($type) => $type->where('name', 'ilike', "%{$search}%"))))->orderBy($sort, $direction)->paginate(10, ['*'], 'offerings_page')->withQueryString(),
+            'sort' => $sort,
+            'direction' => $direction,
+            'search' => $search,
             'productOptions' => Product::orderBy('name')->get(),
             'accountTypeOptions' => AccountType::orderBy('name')->get(),
             'userOptions' => User::where('role', 'client')->orderBy('name')->get(),

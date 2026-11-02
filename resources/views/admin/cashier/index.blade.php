@@ -217,9 +217,12 @@
         });
     };
 
-    const loadOfferings = async () => {
+    let offeringsSearchTimer;
+    const loadOfferings = async (query = '') => {
         try {
-            const payload = await fetchJson(offeringsUrl);
+            const url = new URL(offeringsUrl, window.location.origin);
+            if (query) url.searchParams.set('q', query);
+            const payload = await fetchJson(url);
             offerings = payload.data || [];
             renderProducts();
             if (!offerings.length) showAlert('Belum ada product offering aktif. Aktifkan atau buat offering terlebih dahulu.');
@@ -261,7 +264,7 @@
         document.getElementById('customer-email').required = !existing;
     };
     document.querySelectorAll('input[name="customer_type"]').forEach(input => input.addEventListener('change', updateCustomerMode));
-    productSearch.addEventListener('input', renderProducts);
+    productSearch.addEventListener('input', () => { clearTimeout(offeringsSearchTimer); offeringsSearchTimer = setTimeout(() => loadOfferings(productSearch.value.trim()), 250); });
     userSearch.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadUsers(1), 250); });
     loadMoreUsers.addEventListener('click', () => loadUsers(userPage + 1, true));
     durationInput.addEventListener('input', updateSummary);
@@ -283,6 +286,7 @@
             let message = `${payload.message}\nNo. ${transaction.number} | ${transaction.customer} | ${transaction.product} | ${money(transaction.amount)} | Aktif sampai ${transaction.expires_at}`;
             if (payload.data.temporary_password) message += `\nLogin client baru: ${transaction.email}\nPassword sementara: ${payload.data.temporary_password}\nCatat password ini sekarang.`;
             showAlert(message, 'success');
+            window.open(transaction.receipt_url, '_blank');
             form.reset();
             document.getElementById('customer-existing').checked = true;
             updateCustomerMode();

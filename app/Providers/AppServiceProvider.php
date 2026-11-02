@@ -66,6 +66,14 @@ class AppServiceProvider extends ServiceProvider
 
             $view->with('appSettings', $settings);
             $view->with('expiringTransactions', $expiringTransactions);
+            $view->with('formatRemainingTime', function ($expiresAt): string {
+                $minutes = max(0, now()->diffInMinutes($expiresAt, false));
+                $days = intdiv($minutes, 1440);
+                $hours = intdiv($minutes % 1440, 60);
+                $remainingMinutes = $minutes % 60;
+
+                return sprintf('%d hari %d jam %d menit lagi', $days, $hours, $remainingMinutes);
+            });
         });
     }
 }
