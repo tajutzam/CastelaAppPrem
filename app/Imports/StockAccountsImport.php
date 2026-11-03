@@ -35,8 +35,19 @@ class StockAccountsImport implements ToCollection
                 continue;
             }
 
-            $product = Product::firstOrCreate(['name' => $productName], ['slug' => str()->slug($productName), 'status' => true]);
-            $accountType = AccountType::updateOrCreate(['name' => $accountName], ['code' => str()->slug($accountName), 'max_users' => max(1, (int) ($row->get('kapasitas_slot') ?? 1)), 'status' => true]);
+            $productCode = str()->slug($productName);
+            $product = Product::query()->whereRaw('LOWER(name) = ?', [strtolower($productName)])->orWhere('slug', $productCode)->first();
+            if (! $product) {
+                $product = Product::create(['name' => $productName, 'slug' => $productCode, 'status' => true]);
+            }
+
+            $accountCode = str()->slug($accountName);
+            $accountType = AccountType::query()->whereRaw('LOWER(name) = ?', [strtolower($accountName)])->orWhere('code', $accountCode)->first();
+            if (! $accountType) {
+                $accountType = AccountType::create(['name' => $accountName, 'code' => $accountCode, 'max_users' => max(1, (int) ($row->get('kapasitas_slot') ?? 1)), 'status' => true]);
+            } else {
+                $accountType->update(['max_users' => max(1, (int) ($row->get('kapasitas_slot') ?? $accountType->max_users)), 'status' => true]);
+            }
             ProductOffering::updateOrCreate(
                 ['product_id' => $product->id, 'account_type_id' => $accountType->id, 'email' => $email],
                 ['created_at' => filled($row->get('mulai_premium') ?? null) ? $this->parseDate($row->get('mulai_premium')) : null, 'starts_at' => filled($row->get('mulai_premium') ?? null) ? $this->parseDate($row->get('mulai_premium')) : null, 'expires_at' => filled($row->get('berakhir_premium') ?? null) ? $this->parseDate($row->get('berakhir_premium')) : null, 'status' => match (strtolower(trim((string) ($row->get('status_akun') ?? 'active')))) {

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\StockWorkbookExport;
-use App\Imports\StockWorkbookImport;
+use App\Jobs\ImportStockWorkbook;
 use App\Models\AccountType;
 use App\Models\Product;
 use App\Models\ProductOffering;
@@ -177,11 +177,11 @@ class AdminCatalogController extends Controller
 
     public function importOfferings(Request $request): RedirectResponse
     {
-        set_time_limit(0);
         $request->validate(['stock_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']]);
-        Excel::import(new StockWorkbookImport, $request->file('stock_file'));
+        $path = $request->file('stock_file')->store('imports');
+        ImportStockWorkbook::dispatch($path);
 
-        return back()->with('success', 'Stock akun berhasil diimport dan di-upsert ke offering.');
+        return back()->with('success', 'File berhasil diupload. Import stock berjalan di background.');
     }
 
     public function offerings(Request $request): View
