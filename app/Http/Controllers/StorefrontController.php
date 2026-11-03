@@ -56,16 +56,32 @@ class StorefrontController extends Controller
         ]);
 
         try {
-            Http::timeout(15)
+            $response = Http::timeout(15)
                 ->retry(2, 500)
                 ->post('https://api.telegram.org/bot'.$botToken.'/sendMessage', [
                     'chat_id' => $chatId,
                     'text' => $text,
                 ])
-                ->throw()
-                ->json();
+                ->throw();
+
+            $result = $response->json();
+            if (($result['ok'] ?? false) !== true) {
+                throw new \RuntimeException($result['description'] ?? 'Telegram menolak pesan.');
+            }
+
+            Log::info('Telegram custom order sent.', [
+                'chat_id' => $chatId,
+                'message_id' => $result['result']['message_id'] ?? null,
+                'offering_id' => $offering->id,
+            ]);
         } catch (\Throwable $exception) {
-            Log::error('Telegram custom order failed.', ['message' => $exception->getMessage()]);
+            Log::error('Telegram custom order failed.', [
+                'message' => $exception->getMessage(),
+                'chat_id' => $chatId,
+                'offering_id' => $offering->id,
+                'status' => isset($response) ? $response->status() : null,
+                'response' => isset($response) ? $response->json() : null,
+            ]);
 
             return back()->withInput()->with('error', 'Permintaan gagal dikirim ke Telegram. Silakan coba lagi.');
         }
