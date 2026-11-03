@@ -44,9 +44,7 @@
                             <td>{{ $remainingSeconds === null ? 'Tidak terbatas' : ($remainingSeconds > 0 ? $remainingDays.' hari '.$remainingHours.' jam' : 'Sudah berakhir') }}</td>
                             <td class="text-end pe-4 text-nowrap">
                                 <a href="{{ route('admin.transactions.receipt', $transaction) }}" class="btn btn-light btn-sm" title="Cetak struk"><i class="fa-solid fa-print"></i></a>
-                                @if (! $transaction->logged_out_at)
-                                    <form method="POST" action="{{ route('admin.transactions.logged-out', $transaction) }}" class="d-inline" data-confirm="Tandai transaksi ini sudah logout?"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="PATCH"><button class="btn btn-light btn-sm text-warning" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button></form>
-                                @endif
+                                <form method="POST" action="{{ route('admin.transactions.logged-out', $transaction) }}" class="d-inline" data-confirm="Tandai transaksi ini sudah logout?"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="PATCH"><button class="btn btn-light btn-sm text-warning" title="{{ $transaction->logged_out_at ? 'Catat logout ulang' : 'Logout' }}"><i class="fa-solid fa-right-from-bracket"></i></button></form>
                                 <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#renew-{{ $transaction->id }}" title="Renew"><i class="fa-solid fa-rotate"></i></button>
                             </td>
                         </tr>

@@ -57,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
                 ? Transaction::query()
                     ->with('user')
                     ->where('status', 'paid')
+                    ->whereNull('logged_out_at')
                     ->whereNotNull('expires_at')
                     ->whereBetween('expires_at', [now(), now()->addDays(5)])
                     ->orderBy('expires_at')
