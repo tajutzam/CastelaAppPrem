@@ -9,16 +9,6 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', [StorefrontController::class, 'home'])->name('storefront.home');
 Route::post('/custom-order', [StorefrontController::class, 'customOrder'])->middleware('throttle:5,1')->name('storefront.custom-order');
-Route::get('/login-animation', function () {
-    $animation = storage_path('app/public/Login Character Animation.lottie');
-
-    abort_unless(is_file($animation), 404);
-
-    return response()->file($animation, [
-        'Content-Type' => 'application/zip',
-        'Cache-Control' => 'public, max-age=3600',
-    ]);
-})->name('login.animation');
 Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->middleware('auth')->name('logout');

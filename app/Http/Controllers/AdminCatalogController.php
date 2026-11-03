@@ -205,12 +205,11 @@ class AdminCatalogController extends Controller
 
     public function offeringDetail(ProductOffering $productOffering): View
     {
-        $productOffering->load(['product', 'accountType', 'subscriptions.user'])->loadCount('subscriptions');
-        $providerLabel = 'Akses manual';
+        $productOffering->load(['product', 'accountType', 'subscriptions.user', 'transactions.user', 'transactions.subscription'])->loadCount('subscriptions');
 
         return view('admin.master.offering-detail', [
             'offering' => $productOffering,
-            'subscriptions' => $productOffering->subscriptions->sortByDesc('expires_at')->values(),
+            'transactions' => $productOffering->transactions->sortByDesc('paid_at')->values(),
         ]);
     }
 
@@ -283,6 +282,7 @@ class AdminCatalogController extends Controller
             'product_id' => ['required', 'exists:products,id'],
             'account_type_id' => ['required', 'exists:account_types,id'],
             'email' => ['required', 'email', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:5000'],
             'price' => ['required', 'numeric', 'min:0'],
             'duration_days' => ['required', 'integer', 'min:1'],
             'starts_at' => ['required', 'date'],
@@ -309,6 +309,7 @@ class AdminCatalogController extends Controller
                     ->ignore($productOffering->id),
             ],
             'email' => ['required', 'email', 'max:255'],
+            'notes' => ['nullable', 'string', 'max:5000'],
             'price' => ['required', 'numeric', 'min:0'],
             'duration_days' => ['required', 'integer', 'min:1'],
             'starts_at' => ['required', 'date'],

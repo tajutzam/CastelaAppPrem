@@ -325,7 +325,7 @@
         <div class="aside-animation">
             <dotlottie-wc
                 class="login-animation"
-                src="{{ route('login.animation') }}"
+                src="{{ asset('assets/login-character-animation.lottie') }}"
                 autoplay
                 loop
                 aria-label="Animasi karakter login">

@@ -86,18 +86,18 @@
                         <select name="user_id" id="user_id" class="form-select" size="4" aria-label="Pilih client" required><option value="">Memuat client...</option></select>
                         <div class="d-flex justify-content-between align-items-center mt-2"><small class="pos-result" id="user-result-count"></small><button type="button" id="load-more-users" class="btn btn-sm btn-light d-none">Muat lainnya</button></div>
                     </div>
-                    <div id="new-customer-fields" class="d-none">
-                        <div class="mb-2"><label class="pos-label" for="customer-name">Nama pelanggan</label><input id="customer-name" name="name" class="form-control" autocomplete="name" placeholder="Nama lengkap"></div>
-                        <div class="mb-2"><label class="pos-label" for="customer-email">Email</label><input id="customer-email" name="email" type="email" class="form-control" autocomplete="email" placeholder="client@example.com"></div>
-                        <div><label class="pos-label" for="customer-phone">Nomor telepon (opsional)</label><input id="customer-phone" name="phone_number" class="form-control" autocomplete="tel" placeholder="08xxxxxxxxxx"></div>
-                    </div>
+<div id="new-customer-fields" class="d-none">
+                         <div class="mb-2"><label class="pos-label" for="customer-name">Nama pelanggan</label><input id="customer-name" name="name" class="form-control" autocomplete="name" placeholder="Nama lengkap"></div>
+                         <div><label class="pos-label" for="customer-phone">Nomor HP (opsional)</label><input id="customer-phone" name="phone_number" class="form-control" autocomplete="tel" placeholder="08xxxxxxxxxx"></div>
+                     </div>
                     <div class="pos-divider"></div>
                     <div class="d-flex justify-content-between align-items-center mb-3"><div class="pos-label mb-0">Ringkasan Pesanan</div><span class="badge bg-light text-secondary">1 produk / transaksi</span></div>
                     <div class="pos-order">
-                        <div class="d-flex align-items-center gap-3"><div class="pos-product-icon"><i class="fa-solid fa-cube"></i></div><div><div class="pos-order-name" id="selected-product-name">Belum ada produk</div><div class="pos-order-sub" id="selected-product-description">Pilih produk dari katalog kiri</div><div class="pos-order-email" id="selected-product-email"><i class="fa-regular fa-envelope"></i><span>—</span></div></div></div>
+                        <div class="d-flex align-items-center gap-3"><div class="pos-product-icon"><i class="fa-solid fa-cube"></i></div><div><div class="pos-order-name" id="selected-product-name">Belum ada produk</div><div class="pos-order-sub" id="selected-product-description">Pilih produk dari katalog kiri</div><div class="pos-order-email" id="selected-product-email"><i class="fa-regular fa-envelope"></i><span>—</span></div><div class="pos-order-sub" id="selected-product-note">Catatan: —</div></div></div>
                         <div class="pos-order-row"><span>Harga modal</span><strong id="selected-product-price">-</strong></div>
-                        <div class="pos-order-row"><span>Masa langganan</span><strong id="selected-product-duration">—</strong></div>
-                        <div class="pos-order-row"><span>Sisa kuota user</span><strong id="selected-product-quota">-</strong></div>
+<div class="pos-order-row"><span>Masa langganan</span><strong id="selected-product-duration">—</strong></div>
+                         <div class="pos-order-row"><span>Sisa durasi akun</span><strong id="selected-product-remaining">—</strong></div>
+                         <div class="pos-order-row"><span>Sisa kuota user</span><strong id="selected-product-quota">-</strong></div>
                         <div class="pos-total"><span>Total pembayaran</span><strong id="display-total">—</strong></div>
                     </div>
                     <input type="hidden" id="product_offering_id" name="product_offering_id" required>
@@ -169,8 +169,10 @@
         document.getElementById('selected-product-name').textContent = selectedOffering?.label || 'Belum ada produk';
         document.getElementById('selected-product-description').textContent = selectedOffering ? 'Paket langganan terpilih' : 'Pilih produk dari katalog kiri';
         document.querySelector('#selected-product-email span').textContent = selectedOffering ? (selectedOffering.email || 'Email belum tersedia') : '—';
+        document.getElementById('selected-product-note').textContent = selectedOffering ? `Catatan: ${selectedOffering.notes || 'Tidak ada catatan'}` : 'Catatan: —';
         document.getElementById('selected-product-price').textContent = selectedOffering ? money(selectedOffering.price) : '—';
         document.getElementById('selected-product-duration').textContent = selectedOffering ? `${durationInput.value || 0} hari` : '—';
+        document.getElementById('selected-product-remaining').textContent = selectedOffering ? `${selectedOffering.remaining_days ?? 0} hari` : '—';
         document.getElementById('selected-product-quota').textContent = selectedOffering ? `${selectedOffering.quota} dari ${selectedOffering.max_users} user` : '-';
         document.getElementById('display-total').textContent = selectedOffering && amountInput.value !== '' ? money(amountInput.value) : '—';
     };
@@ -209,9 +211,11 @@
             const emailText = document.createElement('span'); emailText.textContent = offering.email || 'Email belum tersedia';
             email.append(emailIcon, emailText);
             const duration = document.createElement('span'); duration.className = 'pos-product-duration'; duration.textContent = `${offering.duration_days ?? 30} hari langganan`;
+            const remaining = document.createElement('span'); remaining.className = 'pos-product-duration'; remaining.textContent = `Sisa akun ${offering.remaining_days ?? 0} hari`;
+            const note = document.createElement('span'); note.className = 'pos-product-duration'; note.textContent = offering.notes || 'Tidak ada catatan';
             const quota = document.createElement('span'); quota.className = 'pos-product-quota'; quota.textContent = `Sisa kuota ${offering.quota} / ${offering.max_users}`;
             const price = document.createElement('span'); price.className = 'pos-product-price'; price.textContent = money(offering.price);
-            card.append(icon, name, email, duration, quota, price);
+            card.append(icon, name, email, duration, remaining, note, quota, price);
             card.addEventListener('click', () => chooseOffering(offering));
             productGrid.append(card);
         });
@@ -261,7 +265,6 @@
         newCustomerFields.classList.toggle('d-none', existing);
         userSelect.required = existing;
         document.getElementById('customer-name').required = !existing;
-        document.getElementById('customer-email').required = !existing;
     };
     document.querySelectorAll('input[name="customer_type"]').forEach(input => input.addEventListener('change', updateCustomerMode));
     productSearch.addEventListener('input', () => { clearTimeout(offeringsSearchTimer); offeringsSearchTimer = setTimeout(() => loadOfferings(productSearch.value.trim()), 250); });

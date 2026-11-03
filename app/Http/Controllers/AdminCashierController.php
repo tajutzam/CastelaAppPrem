@@ -27,20 +27,22 @@ class AdminCashierController extends Controller
     {
         $customer = $request->integer('customer');
         $search = $request->string('search')->trim()->toString();
+        $phoneSearch = preg_replace('/\D+/', '', $search);
         $logoutStatus = $request->string('logout_status')->toString();
         $accessStatus = $request->string('access_status')->toString();
         $sortColumns = ['number', 'product_name', 'total_amount', 'starts_at', 'expires_at', 'paid_at', 'status'];
         $sort = $request->string('sort')->toString();
         $direction = $request->string('direction')->lower()->toString() === 'asc' ? 'asc' : 'desc';
         $sort = in_array($sort, $sortColumns, true) ? $sort : 'paid_at';
-        $query = Transaction::with(['user', 'cashier', 'subscription'])
+        $query = Transaction::with(['user', 'cashier', 'subscription', 'productOffering'])
             ->when($customer, fn ($query) => $query->where('user_id', $customer))
-            ->when($search, fn ($query) => $query->where(function ($query) use ($search): void {
+            ->when($search, fn ($query) => $query->where(function ($query) use ($search, $phoneSearch): void {
                 $query->where('number', 'like', "%{$search}%")
                     ->orWhereHas('user', fn ($user) => $user
                         ->where('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('phone_number', 'like', "%{$search}%"));
+                        ->orWhere('phone_number', 'like', "%{$search}%")
+                        ->when($phoneSearch !== '', fn ($user) => $user->orWhere('phone_number', 'like', "%{$phoneSearch}%")));
             }))
             ->when($logoutStatus === 'logged_out', fn ($query) => $query->whereNotNull('logged_out_at'))
             ->when($logoutStatus === 'pending', fn ($query) => $query->whereNull('logged_out_at'))
@@ -278,8 +280,11 @@ class AdminCashierController extends Controller
                 'duration_days' => $offering->duration_days,
                 'max_users' => $offering->accountType->max_users,
                 'email' => $offering->email,
+                'notes' => $offering->notes,
                 'used_quota' => $offering->active_subscriptions_count,
                 'quota' => max(0, $offering->accountType->max_users - $offering->active_subscriptions_count),
+                'remaining_days' => $offering->expires_at?->isFuture() ? (int) floor(now()->diffInSeconds($offering->expires_at) / 86400) : 0,
+                'expires_at' => $offering->expires_at?->format('d M Y H:i'),
             ]);
 
         return response()->json(['data' => $offerings]);
@@ -291,7 +296,7 @@ class AdminCashierController extends Controller
             'customer_type' => ['required', Rule::in(['existing', 'new'])],
             'user_id' => ['required_if:customer_type,existing', 'nullable', Rule::exists('users', 'id')->where('role', 'client')],
             'name' => ['required_if:customer_type,new', 'nullable', 'string', 'max:255'],
-            'email' => ['required_if:customer_type,new', 'nullable', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'phone_number' => ['nullable', 'string', 'max:255'],
             'product_offering_id' => ['required', 'exists:product_offerings,id'],
             'total_amount' => ['required', 'numeric', 'min:0', 'max:9999999999.99'],
@@ -311,7 +316,7 @@ class AdminCashierController extends Controller
                 $temporaryPassword = Str::random(16);
                 $customer = User::create([
                     'name' => $data['name'],
-                    'email' => $data['email'],
+                    'email' => $data['email'] ?? null,
                     'phone_number' => $data['phone_number'] ?? null,
                     'password' => $temporaryPassword,
                     'role' => 'client',
