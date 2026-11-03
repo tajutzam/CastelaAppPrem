@@ -46,7 +46,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'admin'])->group(fun
     Route::post('/offerings', [AdminCatalogController::class, 'storeOffering'])->name('offerings.store');
     Route::put('/offerings/{productOffering}', [AdminCatalogController::class, 'updateOffering'])->name('offerings.update');
     Route::patch('/offerings/{productOffering}/status', [AdminCatalogController::class, 'updateOfferingStatus'])->name('offerings.status');
-    Route::post('/offerings/{productOffering}/users', [AdminCatalogController::class, 'addOfferingUser'])->name('offerings.users.store');
     Route::delete('/offerings/{productOffering}', [AdminCatalogController::class, 'destroyOffering'])->name('offerings.destroy');
     Route::patch('/products/{product}/toggle', [AdminCatalogController::class, 'toggleProduct'])->name('products.toggle');
     Route::patch('/account-types/{accountType}/toggle', [AdminCatalogController::class, 'toggleAccountType'])->name('account-types.toggle');

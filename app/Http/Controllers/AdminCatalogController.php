@@ -206,11 +206,13 @@ class AdminCatalogController extends Controller
     public function offeringDetail(ProductOffering $productOffering): View
     {
         $productOffering->load(['product', 'accountType', 'subscriptions.user', 'transactions.user', 'transactions.subscription'])->loadCount('subscriptions');
+        $transactions = $productOffering->transactions->sortByDesc('paid_at')->values();
+        $subscriptionIds = $transactions->pluck('subscription_id')->filter()->unique();
 
         return view('admin.master.offering-detail', [
             'offering' => $productOffering,
-            'transactions' => $productOffering->transactions->sortByDesc('paid_at')->values(),
-            'subscriptions' => $productOffering->subscriptions->sortByDesc('created_at')->values(),
+            'transactions' => $transactions,
+            'subscriptions' => $productOffering->subscriptions->whereIn('id', $subscriptionIds)->sortByDesc('created_at')->values(),
         ]);
     }
 
@@ -327,31 +329,6 @@ class AdminCatalogController extends Controller
         $productOffering->update($data);
 
         return back()->with('success', 'Status offering berhasil diperbarui.');
-    }
-
-    public function addOfferingUser(Request $request, ProductOffering $productOffering): RedirectResponse
-    {
-        $data = $request->validate([
-            'user_id' => ['required', Rule::exists('users', 'id')->where('role', 'client')],
-        ]);
-
-        if (! $productOffering->email) {
-            return back()->with('error', 'Tambahkan email pada offering sebelum menambahkan user.');
-        }
-
-        if ($productOffering->subscriptions()->where('user_id', $data['user_id'])->exists()) {
-            return back()->with('error', 'User tersebut sudah ditambahkan ke offering ini.');
-        }
-
-        Subscription::create([
-            'user_id' => $data['user_id'],
-            'product_offering_id' => $productOffering->id,
-            'status' => 'active',
-            'starts_at' => $productOffering->starts_at,
-            'expires_at' => $productOffering->expires_at,
-        ]);
-
-        return back()->with('success', 'User berhasil ditambahkan ke offering.');
     }
 
     public function destroyOffering(ProductOffering $productOffering): RedirectResponse
