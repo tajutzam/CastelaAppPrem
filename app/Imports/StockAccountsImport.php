@@ -48,11 +48,15 @@ class StockAccountsImport implements ToCollection
             } else {
                 $accountType->update(['max_users' => max(1, (int) ($row->get('kapasitas_slot') ?? $accountType->max_users)), 'status' => true]);
             }
+            $startsAt = $this->parseDate($row->get('mulai_premium'));
+            $expiresAt = $this->parseDate($row->get('berakhir_premium'));
+            $durationDays = $startsAt && $expiresAt ? max(1, $startsAt->diffInDays($expiresAt)) : 30;
+
             ProductOffering::updateOrCreate(
                 ['product_id' => $product->id, 'account_type_id' => $accountType->id, 'email' => $email],
-                ['created_at' => filled($row->get('mulai_premium') ?? null) ? $this->parseDate($row->get('mulai_premium')) : null, 'starts_at' => filled($row->get('mulai_premium') ?? null) ? $this->parseDate($row->get('mulai_premium')) : null, 'expires_at' => filled($row->get('berakhir_premium') ?? null) ? $this->parseDate($row->get('berakhir_premium')) : null, 'status' => match (strtolower(trim((string) ($row->get('status_akun') ?? 'active')))) {
+                ['created_at' => $startsAt, 'starts_at' => $startsAt, 'expires_at' => $expiresAt, 'status' => match (strtolower(trim((string) ($row->get('status_akun') ?? 'active')))) {
                     'suspend', 'suspended' => 'suspended', 'deactivated', 'dead', 'deadactive' => 'deactivated', default => 'active'
-                }, 'notes' => $row->get('catatan') ?? null, 'price' => (float) ($row->get('modal') ?? 0), 'duration_days' => max(1, (int) ($row->get('sisa_hari') ?? 30))],
+                }, 'notes' => $row->get('catatan') ?? null, 'price' => (float) ($row->get('modal') ?? 0), 'duration_days' => $durationDays],
             );
         }
     }
