@@ -7,6 +7,7 @@ use App\Models\ProductOffering;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class StorefrontController extends Controller
@@ -35,8 +36,39 @@ class StorefrontController extends Controller
         ]);
         $offering = ProductOffering::query()->with(['product', 'accountType'])->withCount(['subscriptions as active_subscriptions_count' => fn ($subscription) => $subscription->where('status', 'active')->where('expires_at', '>', now())])->where('status', 'active')->findOrFail($data['offering_id']);
         abort_if($offering->active_subscriptions_count >= $offering->accountType->max_users, 422, 'Offering ini sudah penuh.');
-        $text = implode("\n", ['*Permintaan custom order baru*', 'Paket: '.$offering->product->name.' '.$offering->accountType->name, 'Durasi: '.$data['duration_days'].' hari', 'Nama: '.$data['name'], 'Email: '.$data['email'], 'WhatsApp: '.($data['phone'] ?: '-'), 'Telegram: '.$data['telegram_username']]);
-        Http::post('https://api.telegram.org/bot'.config('services.telegram.bot_token').'/sendMessage', ['chat_id' => config('services.telegram.chat_id'), 'text' => $text, 'parse_mode' => 'Markdown'])->throw();
+        $botToken = config('services.telegram.bot_token');
+        $chatId = config('services.telegram.chat_id');
+
+        if (! $botToken || ! $chatId) {
+            Log::error('Telegram custom order is not configured.');
+
+            return back()->withInput()->with('error', 'Permintaan belum dapat dikirim. Telegram belum dikonfigurasi.');
+        }
+
+        $text = implode("\n", [
+            'Permintaan custom order baru',
+            'Paket: '.$offering->product->name.' '.$offering->accountType->name,
+            'Durasi: '.$data['duration_days'].' hari',
+            'Nama: '.$data['name'],
+            'Email: '.$data['email'],
+            'WhatsApp: '.($data['phone'] ?: '-'),
+            'Telegram: '.$data['telegram_username'],
+        ]);
+
+        try {
+            Http::timeout(15)
+                ->retry(2, 500)
+                ->post('https://api.telegram.org/bot'.$botToken.'/sendMessage', [
+                    'chat_id' => $chatId,
+                    'text' => $text,
+                ])
+                ->throw()
+                ->json();
+        } catch (\Throwable $exception) {
+            Log::error('Telegram custom order failed.', ['message' => $exception->getMessage()]);
+
+            return back()->withInput()->with('error', 'Permintaan gagal dikirim ke Telegram. Silakan coba lagi.');
+        }
 
         return back()->with('success', 'Permintaan berhasil dikirim. Cassie akan menghubungi kamu segera.');
     }

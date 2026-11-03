@@ -16,6 +16,14 @@
     </style>
 </head>
 <body>
+@if (session('success') || session('error'))
+    <div class="container mt-3">
+        <div class="alert {{ session('success') ? 'alert-success' : 'alert-danger' }} alert-dismissible fade show" role="alert">
+            {{ session('success') ?: session('error') }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+        </div>
+    </div>
+@endif
 <nav class="navbar navbar-expand-lg container px-4 py-3"><a class="brand" href="#home">Castela<span>by. Cassie</span></a><button class="navbar-toggler border-0" data-bs-toggle="collapse" data-bs-target="#storeNav"><i class="fa-solid fa-bars"></i></button><div class="collapse navbar-collapse" id="storeNav"><div class="navbar-nav ms-auto align-items-lg-center gap-lg-3"><a class="nav-link" href="#home">Home</a><a class="nav-link" href="#shop">Shop</a><a class="nav-link" href="#pricing">Pricing</a><a class="nav-link" href="#how">How it works</a><a class="nav-link" href="#faq">FAQ</a><a class="btn btn-candy ms-lg-2 py-2" href="{{ route('login') }}">Login ♡</a></div></div></nav>
 <header class="hero" id="home"><div class="container hero-inner"><div class="row align-items-center"><div class="col-12"><div class="eyebrow">by. Cassie proudly presents...</div><h1>Your Little World of <em>AI Magic</em> ✨</h1><p class="hero-copy">Temukan teman AI favoritmu dengan harga yang lovely. Jelajahi pilihan ChatGPT dan Claude dalam pengalaman belanja yang manis, jelas, dan nyaman.</p><div class="d-flex flex-wrap gap-3 mt-4"><a class="btn-candy" href="#shop">Explore Our Plans ♡</a><a class="btn-soft" href="#how">How It Works ✨</a></div><i class="star s1 fa-solid fa-star"></i><i class="star s2 fa-solid fa-sparkles"></i><i class="star s3 fa-solid fa-star"></i></div></div></div></header>
 <section id="shop"><div class="container"><div class="section-heading"><div class="eyebrow">pick your companion</div><h2>Pick Your AI Bestie! ♡</h2><p>Two lovely AI companions, one magical little shop.</p></div><div class="row g-4">@forelse($products as $product)<div class="col-md-6"><article class="product-card {{ str_contains(strtolower($product->name),'claude') ? 'claude' : '' }}"><div class="product-icon">{{ str_contains(strtolower($product->name),'claude') ? '✦' : '✧' }}</div><h3>{{ $product->name }}</h3><p class="text-secondary">{{ $product->description ?: 'Teman AI untuk menemani ide, kerja, dan hari-harimu.' }}</p><div class="mb-4">@foreach($product->offerings as $offering)<span class="plan-pill">{{ $offering->accountType->name }}</span>@endforeach</div><div class="d-flex justify-content-between align-items-center"><strong>Harga custom sesuai durasi</strong><a class="btn-soft" href="#pricing">Explore ♡</a></div></article></div>@empty<div class="col-12 text-center text-muted">Plan manis sedang disiapkan.</div>@endforelse</div></div></section>

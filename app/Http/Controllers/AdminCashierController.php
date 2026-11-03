@@ -76,12 +76,16 @@ class AdminCashierController extends Controller
 
     public function markTransactionLoggedOut(Request $request, Transaction $transaction): RedirectResponse
     {
-        $transaction->update([
-            'logged_out_at' => now(),
-            'logged_out_by' => $request->user()->id,
-        ]);
+        DB::transaction(function () use ($request, $transaction): void {
+            $transaction->update([
+                'logged_out_at' => $transaction->logged_out_at ?? now(),
+                'logged_out_by' => $transaction->logged_out_by ?? $request->user()->id,
+            ]);
 
-        return back()->with('success', 'Status logout transaksi berhasil dicatat.');
+            $transaction->subscription?->update(['status' => 'cancelled']);
+        });
+
+        return back()->with('success', 'Status logout transaksi berhasil dicatat dan slot offering dikembalikan.');
     }
 
     public function markTransactionInactive(Transaction $transaction): RedirectResponse
