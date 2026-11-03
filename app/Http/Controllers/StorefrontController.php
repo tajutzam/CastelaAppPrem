@@ -26,13 +26,14 @@ class StorefrontController extends Controller
 
     public function customOrder(Request $request): RedirectResponse
     {
+        $request->merge(['telegram_username' => ltrim(trim((string) $request->input('telegram_username')), '@')]);
         $data = $request->validate([
             'offering_id' => ['required', 'exists:product_offerings,id'],
             'duration_days' => ['required', 'integer', 'min:1', 'max:3650'],
             'name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'telegram_username' => ['required', 'string', 'max:33', 'regex:/^@?[A-Za-z0-9_]{5,32}$/'],
+            'telegram_username' => ['required', 'string', 'max:64', 'regex:/^@?[A-Za-z0-9_]{4,32}$/'],
         ]);
         $offering = ProductOffering::query()->with(['product', 'accountType'])->withCount(['subscriptions as active_subscriptions_count' => fn ($subscription) => $subscription->where('status', 'active')->where('expires_at', '>', now())])->where('status', 'active')->findOrFail($data['offering_id']);
         abort_if($offering->active_subscriptions_count >= $offering->accountType->max_users, 422, 'Offering ini sudah penuh.');
