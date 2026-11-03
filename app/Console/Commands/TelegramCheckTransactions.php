@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Transaction;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class TelegramCheckTransactions extends Command
@@ -15,7 +16,7 @@ class TelegramCheckTransactions extends Command
     public function handle(): int
     {
         $this->ensureConfigured();
-        $offset = null;
+        $offset = Cache::get('telegram.poll.offset');
 
         do {
             $response = Http::timeout(35)->get('https://api.telegram.org/bot'.config('services.telegram.bot_token').'/getUpdates', array_filter([
@@ -25,6 +26,7 @@ class TelegramCheckTransactions extends Command
 
             foreach ($response['result'] ?? [] as $update) {
                 $offset = $update['update_id'] + 1;
+                Cache::forever('telegram.poll.offset', $offset);
                 $message = $update['message'] ?? [];
                 if (trim($message['text'] ?? '') !== '/cek') {
                     continue;
