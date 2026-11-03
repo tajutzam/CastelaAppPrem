@@ -24,32 +24,29 @@
     </section>
 
     <section class="card mb-4">
-        <div class="card-header d-flex align-items-center justify-content-between"><div><h3 class="card-title mb-1">Daftar pelanggan berlangganan</h3><div class="small text-muted">Status transaksi, akses, dan sisa masa aktif pelanggan.</div></div><span class="badge badge-soft-primary">{{ $transactions->count() }} transaksi</span></div>
+        <div class="card-header d-flex align-items-center justify-content-between"><div><h3 class="card-title mb-1">Daftar pelanggan berlangganan</h3><div class="small text-muted">Status transaksi, akses, dan sisa masa aktif pelanggan.</div></div><span class="badge badge-soft-primary">{{ $subscriptions->count() }} user</span></div>
         <div class="table-responsive">
             <table class="table align-middle mb-0">
                 <thead><tr><th class="ps-4">Pelanggan</th><th>Nomor transaksi</th><th>Status</th><th>Berakhir</th><th>Sisa waktu</th><th class="text-end pe-4">Aksi</th></tr></thead>
                 <tbody>
-                    @forelse ($transactions as $transaction)
+                    @forelse ($subscriptions as $subscription)
                         @php
-                            $isActive = $transaction->status === 'paid' && ($transaction->expires_at === null || $transaction->expires_at->isFuture());
-                            $remainingSeconds = $transaction->expires_at ? max(0, now()->diffInSeconds($transaction->expires_at, false)) : null;
+                            $transaction = $transactions->firstWhere('user_id', $subscription->user_id);
+                            $isActive = $subscription->status === 'active' && ($subscription->expires_at === null || $subscription->expires_at->isFuture());
+                            $remainingSeconds = $subscription->expires_at ? max(0, now()->diffInSeconds($subscription->expires_at, false)) : null;
                             $remainingDays = $remainingSeconds === null ? null : intdiv($remainingSeconds, 86400);
                             $remainingHours = $remainingSeconds === null ? null : intdiv($remainingSeconds % 86400, 3600);
                         @endphp
                         <tr>
-                            <td class="ps-4"><div class="fw-semibold text-dark">{{ $transaction->user?->name ?: '—' }}</div><small class="text-muted">{{ $transaction->user?->phone_number ?: 'Nomor HP tidak tersedia' }}</small></td>
-                            <td><a href="{{ route('admin.transactions.show', $transaction) }}" class="text-decoration-none">{{ $transaction->number }}</a></td>
+                            <td class="ps-4"><div class="fw-semibold text-dark">{{ $subscription->user?->name ?: '—' }}</div><small class="text-muted">{{ $subscription->user?->phone_number ?: 'Nomor HP tidak tersedia' }}</small></td>
+                            <td>@if ($transaction)<a href="{{ route('admin.transactions.show', $transaction) }}" class="text-decoration-none">{{ $transaction->number }}</a>@else<span class="text-muted">Manual</span>@endif</td>
                             <td><span class="badge {{ $isActive ? 'badge-soft-success' : 'badge-soft-danger' }}">{{ $isActive ? 'Aktif' : 'Berakhir' }}</span></td>
-                            <td>{{ $transaction->expires_at?->format('d M Y H:i') ?: 'Tidak terbatas' }}</td>
+                            <td>{{ $subscription->expires_at?->format('d M Y H:i') ?: 'Tidak terbatas' }}</td>
                             <td>{{ $remainingSeconds === null ? 'Tidak terbatas' : ($remainingSeconds > 0 ? $remainingDays.' hari '.$remainingHours.' jam' : 'Sudah berakhir') }}</td>
-                            <td class="text-end pe-4 text-nowrap">
-                                <a href="{{ route('admin.transactions.receipt', $transaction) }}" class="btn btn-light btn-sm" title="Cetak struk"><i class="fa-solid fa-print"></i></a>
-                                <form method="POST" action="{{ route('admin.transactions.logged-out', $transaction) }}" class="d-inline" data-confirm="Tandai transaksi ini sudah logout?"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="PATCH"><button class="btn btn-light btn-sm text-warning" title="{{ $transaction->logged_out_at ? 'Catat logout ulang' : 'Logout' }}"><i class="fa-solid fa-right-from-bracket"></i></button></form>
-                                <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#renew-{{ $transaction->id }}" title="Renew"><i class="fa-solid fa-rotate"></i></button>
-                            </td>
+                            <td class="text-end pe-4 text-nowrap">@if ($transaction)<a href="{{ route('admin.transactions.receipt', $transaction) }}" class="btn btn-light btn-sm" title="Cetak struk"><i class="fa-solid fa-print"></i></a><form method="POST" action="{{ route('admin.transactions.logged-out', $transaction) }}" class="d-inline" data-confirm="Tandai transaksi ini sudah logout?"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="PATCH"><button class="btn btn-light btn-sm text-warning" title="Logout"><i class="fa-solid fa-right-from-bracket"></i></button></form><button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#renew-{{ $transaction->id }}" title="Renew"><i class="fa-solid fa-rotate"></i></button>@else<span class="small text-muted">Tidak ada transaksi</span>@endif</td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="py-4 text-center text-muted">Belum ada transaksi pelanggan.</td></tr>
+                        <tr><td colspan="6" class="py-4 text-center text-muted">Belum ada pelanggan berlangganan.</td></tr>
                     @endforelse
                 </tbody>
             </table>

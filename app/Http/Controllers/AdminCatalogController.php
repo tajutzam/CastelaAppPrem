@@ -210,6 +210,7 @@ class AdminCatalogController extends Controller
         return view('admin.master.offering-detail', [
             'offering' => $productOffering,
             'transactions' => $productOffering->transactions->sortByDesc('paid_at')->values(),
+            'subscriptions' => $productOffering->subscriptions->sortByDesc('created_at')->values(),
         ]);
     }
 
