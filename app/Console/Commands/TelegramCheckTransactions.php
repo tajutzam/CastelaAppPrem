@@ -14,6 +14,7 @@ class TelegramCheckTransactions extends Command
 
     public function handle(): int
     {
+        $this->ensureConfigured();
         $offset = null;
 
         do {
@@ -41,6 +42,7 @@ class TelegramCheckTransactions extends Command
         $transactions = Transaction::query()
             ->with('user')
             ->where('status', 'paid')
+            ->whereNull('logged_out_at')
             ->whereNotNull('expires_at')
             ->where('expires_at', '>=', now())
             ->orderBy('expires_at')

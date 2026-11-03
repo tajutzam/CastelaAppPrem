@@ -14,10 +14,12 @@ class TelegramExpiringTransactions extends Command
 
     public function handle(): int
     {
+        $this->ensureConfigured();
+
         $today = now()->startOfDay();
         $tomorrow = $today->copy()->addDay();
         $end = $tomorrow->copy()->endOfDay();
-        $transactions = Transaction::query()->with('user')->where('status', 'paid')->whereBetween('expires_at', [$today, $end])->orderBy('expires_at')->get();
+        $transactions = Transaction::query()->with('user')->where('status', 'paid')->whereNull('logged_out_at')->whereBetween('expires_at', [$today, $end])->orderBy('expires_at')->get();
         $lines = ['*Pengingat expiry transaksi*', ''];
 
         if ($transactions->isEmpty()) {
@@ -43,5 +45,13 @@ class TelegramExpiringTransactions extends Command
         $this->info('Telegram expiry reminder sent.');
 
         return self::SUCCESS;
+    }
+
+    private function ensureConfigured(): void
+    {
+        if (! config('services.telegram.bot_token') || ! config('services.telegram.chat_id')) {
+            $this->error('TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID wajib dikonfigurasi.');
+            abort(1);
+        }
     }
 }
