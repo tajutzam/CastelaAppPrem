@@ -268,9 +268,9 @@ class AdminCashierController extends Controller
             ->where('status', 'active')
             ->whereHas('product', fn ($query) => $query->where('status', true))
             ->when($term, fn ($query) => $query->where(function ($query) use ($term): void {
-                $query->whereHas('product', fn ($product) => $product->where('name', 'ilike', "%{$term}%"))
-                    ->orWhereHas('accountType', fn ($accountType) => $accountType->where('name', 'ilike', "%{$term}%"))
-                    ->orWhere('email', 'ilike', "%{$term}%");
+                $query->whereHas('product', fn ($product) => $product->where('name', 'like', "%{$term}%"))
+                    ->orWhereHas('accountType', fn ($accountType) => $accountType->where('name', 'like', "%{$term}%"))
+                    ->orWhere('email', 'like', "%{$term}%");
             }))
             ->whereRaw('(select count(*) from subscriptions where subscriptions.product_offering_id = product_offerings.id and subscriptions.status = ? and subscriptions.expires_at > ?) < (select max_users from account_types where account_types.id = product_offerings.account_type_id)', ['active', now()])
             ->orderBy('product_id')

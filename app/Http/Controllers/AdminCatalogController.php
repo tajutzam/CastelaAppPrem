@@ -193,7 +193,7 @@ class AdminCatalogController extends Controller
         $search = $request->string('search')->trim()->toString();
 
         return view('admin.master.offerings', [
-            'offerings' => ProductOffering::with(['product', 'accountType'])->withCount('subscriptions')->when($search, fn ($query) => $query->where(fn ($query) => $query->where('email', 'ilike', "%{$search}%")->orWhereHas('product', fn ($product) => $product->where('name', 'ilike', "%{$search}%"))->orWhereHas('accountType', fn ($type) => $type->where('name', 'ilike', "%{$search}%"))))->orderBy($sort, $direction)->paginate(10, ['*'], 'offerings_page')->withQueryString(),
+            'offerings' => ProductOffering::with(['product', 'accountType'])->withCount('subscriptions')->when($search, fn ($query) => $query->where(fn ($query) => $query->where('email', 'like', "%{$search}%")->orWhereHas('product', fn ($product) => $product->where('name', 'like', "%{$search}%"))->orWhereHas('accountType', fn ($type) => $type->where('name', 'like', "%{$search}%"))))->orderBy($sort, $direction)->paginate(10, ['*'], 'offerings_page')->withQueryString(),
             'sort' => $sort,
             'direction' => $direction,
             'search' => $search,
