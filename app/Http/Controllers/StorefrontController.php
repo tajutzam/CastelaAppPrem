@@ -33,7 +33,7 @@ class StorefrontController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:30'],
-            'telegram_username' => ['required', 'string', 'max:64', 'regex:/^@?[A-Za-z0-9_]{4,32}$/'],
+            'telegram_username' => ['required', 'string', 'max:64'],
         ]);
         $offering = ProductOffering::query()->with(['product', 'accountType'])->withCount(['subscriptions as active_subscriptions_count' => fn ($subscription) => $subscription->where('status', 'active')->where('expires_at', '>', now())])->where('status', 'active')->findOrFail($data['offering_id']);
         abort_if($offering->active_subscriptions_count >= $offering->accountType->max_users, 422, 'Offering ini sudah penuh.');
