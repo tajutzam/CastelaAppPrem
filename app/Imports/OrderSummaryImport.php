@@ -42,18 +42,19 @@ class OrderSummaryImport implements ToCollection
                 continue;
             }
 
-            $email = trim((string) ($row->get('email') ?? ''));
+            $offeringEmail = trim((string) ($row->get('email') ?? ''));
+            $email = null;
             $excelProduct = trim((string) ($row->get('produk') ?? ''));
             if (str_starts_with($excelProduct, '=')) {
                 $excelProduct = '';
             }
             $phone = trim((string) ($row->get('no_whatsapp') ?? ''));
             $user = null;
-            if ($email !== '') {
-                $user = $userCache[$email] ??= User::firstOrCreate(['email' => $email], ['name' => $email, 'password' => bcrypt(str()->random(32)), 'phone_number' => $phone ?: null, 'role' => 'client']);
+            if ($phone !== '') {
+                $user = $userCache[$phone] ??= User::firstOrCreate(['phone_number' => $phone], ['name' => 'Customer '.str()->upper(str()->random(6)), 'email' => null, 'password' => bcrypt(str()->random(32)), 'phone_number' => $phone, 'role' => 'client']);
             }
 
-            $offering = $email !== '' ? ($offeringCache[$email] ??= ProductOffering::query()->with(['product', 'accountType'])->whereRaw('LOWER(email) = ?', [strtolower($email)])->first()) : null;
+            $offering = $offeringEmail !== '' ? ($offeringCache[$offeringEmail] ??= ProductOffering::query()->with(['product', 'accountType'])->whereRaw('LOWER(email) = ?', [strtolower($offeringEmail)])->first()) : null;
             if (! $offering) {
                 continue;
             }
