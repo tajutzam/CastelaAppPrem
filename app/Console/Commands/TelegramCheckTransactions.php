@@ -37,6 +37,14 @@ class TelegramCheckTransactions extends Command
         return self::SUCCESS;
     }
 
+    private function ensureConfigured(): void
+    {
+        if (! config('services.telegram.bot_token')) {
+            $this->error('TELEGRAM_BOT_TOKEN wajib dikonfigurasi.');
+            exit(1);
+        }
+    }
+
     private function send(int|string $chatId): void
     {
         $transactions = Transaction::query()
