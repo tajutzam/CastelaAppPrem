@@ -31,7 +31,7 @@
                 <tbody>
                     @forelse ($subscriptions as $subscription)
                         @php
-                            $transaction = $transactions->firstWhere('user_id', $subscription->user_id);
+                            $transaction = $transactions->firstWhere('subscription_id', $subscription->id);
                             $isActive = $subscription->status === 'active' && ($subscription->expires_at === null || $subscription->expires_at->isFuture());
                             $remainingSeconds = $subscription->expires_at ? max(0, now()->diffInSeconds($subscription->expires_at, false)) : null;
                             $remainingDays = $remainingSeconds === null ? null : intdiv($remainingSeconds, 86400);
