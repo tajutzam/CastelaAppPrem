@@ -34,7 +34,7 @@
     <strong>{{ $transaction->product_name }}</strong>
     <div class="muted">{{ $transaction->productOffering?->accountType?->name ?: 'Paket langganan' }}</div>
     <div class="row"><span>Customer</span><span>{{ $transaction->user?->name ?: '-' }}</span></div>
-    <div class="row"><span>Email</span><span>{{ $transaction->user?->email ?: '-' }}</span></div>
+    <div class="row"><span>Email akun</span><span>{{ $transaction->productOffering?->email ?: '-' }}</span></div>
     <div class="row"><span>Durasi</span><span>{{ $transaction->duration_days }} hari</span></div>
     <div class="row"><span>Berlaku sampai</span><span>{{ $transaction->expires_at?->format('d/m/Y') ?: '-' }}</span></div>
     <div class="line"></div>
